@@ -65,15 +65,14 @@
 
 ---
 
-## 9. Concurrency Patterns
-
-- Producer–Consumer Pattern
+## 9. Producer–Consumer Pattern
 
 ---
 
-## 10. Synchronization Aids
+## 10. CyclicBarrier
 
-- CyclicBarrier
-- CountDownLatch
+---
+
+## 11. CountDownLatch
 
 --- 
