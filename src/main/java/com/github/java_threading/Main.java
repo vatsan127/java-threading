@@ -1,9 +1,7 @@
 package com.github.java_threading;
 
-public class JavaThreadingApplication {
-
+public class Main {
     public static void main(String[] args) {
 
     }
-
 }

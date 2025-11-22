@@ -76,3 +76,5 @@
 ## 11. CountDownLatch
 
 --- 
+
+## 12. Interrupted Exception
