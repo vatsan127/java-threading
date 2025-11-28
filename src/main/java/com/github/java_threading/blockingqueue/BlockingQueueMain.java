@@ -1,9 +1,7 @@
 package com.github.java_threading.blockingqueue;
 
-import java.sql.Time;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 /**
  * BlockingQueue is a thread-safe interface that extends the Queue interface.
@@ -14,7 +12,7 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * Default implementations:
  * LinkedBlockingQueue – Does not preallocate size; uses separate locks (putLock and takeLock).
- * ArrayBlockingQueue – Preallocates size and uses a single ReentrantLock for both operations.
+ * ArrayBlockingQueue – Pre-allocates size and uses a single ReentrantLock for both operations.
  * <p>
  * Write operations:
  * add     – Throws IllegalStateException if the queue is full.
@@ -28,12 +26,18 @@ import java.util.concurrent.TimeUnit;
 
 public class BlockingQueueMain {
 
-    private final BlockingQueue<String> queue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<String> queue;
+
+    public BlockingQueueMain() {
+        queue = new LinkedBlockingQueue<>();
+        queue.add("" + 0);
+    }
+
 
     public void producer() {
-        while (true){
+        for (int i = 1; i < 10; i++) {
             try {
-                queue.put(""+System.currentTimeMillis());
+                queue.put("" + i);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -41,18 +45,17 @@ public class BlockingQueueMain {
     }
 
     public void consumer() {
-        while (true){
-            try {
-                String element = queue.take();
-                System.out.println(Thread.currentThread().getName()+" "+element);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+        while (true) {
+            String element = queue.poll();
+            if (element == null) {
+                System.out.println("Queue is empty!!!");
+                break;
             }
+            System.out.println(Thread.currentThread().getName() + " " + element);
         }
     }
 
     public static void main(String[] args) throws InterruptedException {
-
 
         BlockingQueueMain obj = new BlockingQueueMain();
 
@@ -64,7 +67,6 @@ public class BlockingQueueMain {
 
         t1.join();
         t2.join();
-
 
     }
 
