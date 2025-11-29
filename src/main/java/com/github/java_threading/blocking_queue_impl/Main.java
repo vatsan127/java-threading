@@ -41,7 +41,7 @@ public class Main {
 
         String poll = blockingQueue.poll();
         System.out.println(Thread.currentThread().getName() + " - Retrieved element - " + poll);
-        notifyAll(); // ToDO: why do we need to notify each time?
+        notifyAll();
     }
 
 
