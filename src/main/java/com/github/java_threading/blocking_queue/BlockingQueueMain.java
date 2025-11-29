@@ -1,4 +1,4 @@
-package com.github.java_threading.blockingqueue;
+package com.github.java_threading.blocking_queue;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
