@@ -59,8 +59,8 @@ public class BlockingQueueMain {
 
         BlockingQueueMain obj = new BlockingQueueMain();
 
-        Thread t1 = new Thread(() -> obj.producer(), "producer-thread");
-        Thread t2 = new Thread(() -> obj.consumer(), "consumer-thread");
+        Thread t1 = new Thread(obj::producer, "producer-thread");
+        Thread t2 = new Thread(obj::consumer, "consumer-thread");
 
         t1.start();
         t2.start();
