@@ -1,0 +1,68 @@
+wait or notify / notifyAll cannot be called for that object unless that object is synchronized (synchronized block / method).
+
+
+when wait() is called it releases the synchronization on that object.
+
+calling notify() will wake up one thread that has called wait().
+
+Deadlock is a situation where 2 threads need t2o or more locks. They succeed in making one lock but for the lock they wait indefinitely to compless the task.
+
+---
+
+Synchronized methods lock the entire method using the object's intrinsic lock (this for instance methods, or the class object for static methods
+
+so for static and instance methods the locks will be different?
+
+---
+
+what is atomicity in java programming means?
+
+---
+
+what is intrinsic lock?
+
+---
+
+why volatile cannot protect compound operations like incrementing a counter (read-modify-write) ?
+
+---
+
+Compare and swap
+
+---
+
+Fork join
+
+---
+
+Concurrent hashmap Implementation
+
+---
+
+Producer & consumer implementation
+
+---
+
+Java Locks
+	Conditions
+	Monitor
+	ReadWrite
+	Reentrant
+	Semaphore
+	Stamped
+
+---
+
+cyclic barrier
+
+---
+
+countdown latch
+
+---
+
+Virtul Threads
+
+---
+
+pattern matchers
