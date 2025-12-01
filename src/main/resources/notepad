@@ -66,3 +66,13 @@ Virtul Threads
 ---
 
 pattern matchers
+
+
+--
+Hashtable vs concurrent Hashmap
+
+Concurrent Hashmap provides more concurrency than hashtable.
+Concurrent hashmap map implements Concurrent Map which implements Map
+Hashtable implements Map interface directly.
+All methods in the hashtable are synchronized. So only thread can call a method in the hashtable.
+Multiple Threads can read and write at the same time.
