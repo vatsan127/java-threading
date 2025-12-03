@@ -16,15 +16,8 @@ public class ConcurrentMapMain {
         // Atomic Operations
         cmap.putIfAbsent("2", "B"); // Adds entry only if key doesn't exist
         cmap.replace("2", "B2"); // Replaces value for an existing key
-        cmap.compute("2", (k, v) -> (v + "3")); // compute
+        cmap.compute("2", (k, v) -> (v + "3")); // compute the value using the current value
         System.out.println(cmap);
-
-        if (cmap.containsKey("3")) {
-            String s = cmap.get("3");
-            s = s + "4";
-            cmap.put("3", s);
-        }
-
         cmap.computeIfPresent("3", (k, v) -> (v + "3"));
 
     }
