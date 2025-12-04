@@ -1,0 +1,50 @@
+Future & Callable
+=================
+
+Callable<V>:
+------------
+- Like Runnable but returns a result
+- Can throw checked exceptions
+- Single method: V call() throws Exception
+
+Future<V>:
+----------
+- Represents the result of an asynchronous computation
+- Returned when submitting Callable to ExecutorService
+
+Key Methods:
+------------
+get()                    - Blocks until result is available
+get(timeout, unit)       - Blocks with timeout, throws TimeoutException
+isDone()                 - Returns true if task completed
+isCancelled()            - Returns true if task was cancelled
+cancel(mayInterrupt)     - Attempts to cancel the task
+
+CompletableFuture (Java 8+):
+----------------------------
+- Enhanced Future with completion callbacks
+- Supports chaining: thenApply(), thenAccept(), thenCompose()
+- Can be completed manually: complete(), completeExceptionally()
+- Supports combining multiple futures: allOf(), anyOf()
+
+Chaining Thread Behavior:
+-------------------------
+- The thread that completes the first stage executes the next chain (by default)
+- Use *Async() variants to run on a different thread
+
+Method                          Thread Behavior
+------                          ---------------
+thenApply()                     Runs on thread that completed previous stage
+thenApplyAsync()                Runs on a different thread (ForkJoinPool)
+thenApplyAsync(fn, executor)    Runs on specified executor's thread
+
+Example:
+// Thread-1 executes stage 1
+// Thread-1 ALSO executes stage 2 (same thread continues)
+CompletableFuture.supplyAsync(() -> "A")
+    .thenApply(s -> s + "B");
+
+// Thread-1 executes stage 1
+// Thread-2 executes stage 2 (different thread)
+CompletableFuture.supplyAsync(() -> "A")
+    .thenApplyAsync(s -> s + "B");

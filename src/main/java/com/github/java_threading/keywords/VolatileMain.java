@@ -2,13 +2,6 @@
 
     public class VolatileMain {
 
-        /**
-         * Volatile applies only to variables and ensures visibility of changes across threads.
-         * It does not provide atomicity or mutual exclusion.
-         * When a variable is declared volatile, it's stored directly in RAM rather than being cached.
-         * Ensuring that all threads see the most recent value.
-         */
-
         private boolean running = true;
     //    private volatile boolean running = true;
 

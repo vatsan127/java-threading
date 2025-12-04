@@ -1,0 +1,23 @@
+Thread Creation in Java
+=======================
+
+1. Extending Thread class
+   - Create a class that extends Thread
+   - Override the run() method
+   - Create instance and call start()
+   - Limitation: Cannot extend another class (Java single inheritance)
+
+2. Implementing Runnable interface
+   - Create a class that implements Runnable
+   - Implement the run() method
+   - Pass instance to Thread constructor and call start()
+   - Advantage: Can extend another class
+
+3. Anonymous inner class
+   - Create Runnable as anonymous class inline
+   - Useful for one-time use threads
+
+4. Lambda expression (Java 8+)
+   - Runnable is a functional interface (single abstract method)
+   - Can use lambda: new Thread(() -> { ... }).start()
+   - Most concise approach

@@ -1,9 +1,5 @@
 package com.github.java_threading.keywords;
 
-/*
- * Atomic classes provide lock-free, thread-safe operations using compare-and-swap hardware instructions.
- */
-
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class AtomicMain {

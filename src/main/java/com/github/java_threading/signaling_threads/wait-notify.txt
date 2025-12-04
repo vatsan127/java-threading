@@ -1,0 +1,28 @@
+Thread Signaling (wait/notify)
+==============================
+
+Methods: wait(), notify(), notifyAll()
+
+Key Points:
+-----------
+- Must be called from within a synchronized block or method
+- Must hold the synchronization lock on the object being called
+- If called without holding the lock: IllegalMonitorStateException
+
+wait()
+------
+- Causes current thread to release the lock
+- Thread enters waiting state
+- Waits until another thread calls notify() or notifyAll() on same object
+
+notify()
+--------
+- Wakes up a single thread waiting on the object's monitor
+- Which thread is awakened is not guaranteed (JVM decides)
+
+notifyAll()
+-----------
+- Wakes up ALL threads waiting on the object's monitor
+- Lock will be acquired by one of the awakened threads
+- Which specific thread acquires lock is determined by thread scheduler
+- Awakened threads must re-acquire lock before resuming execution

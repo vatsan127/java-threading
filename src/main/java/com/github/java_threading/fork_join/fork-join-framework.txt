@@ -1,0 +1,40 @@
+Fork/Join Framework
+===================
+
+Purpose:
+--------
+- Designed for divide-and-conquer algorithms
+- Efficiently uses multiple processors
+- Work-stealing algorithm for load balancing
+
+ForkJoinPool:
+-------------
+- Specialized ExecutorService for fork/join tasks
+- ForkJoinPool.commonPool() - shared pool (default) will have the parallelism count as Number of CPU present.
+- new ForkJoinPool(parallelism) - custom pool with thread count
+
+RecursiveTask<V> (returns result):
+----------------------------------
+- Extends ForkJoinTask<V>
+- Override compute() method
+- Returns a value of type V
+- Use when you need to aggregate results from subtasks
+
+RecursiveAction (no return value):
+----------------------------------
+- Extends ForkJoinTask<Void>
+- Override compute() method
+- Returns void
+- Use for side-effect operations (logging, updating shared state)
+
+Key Methods:
+------------
+fork()  - Asynchronously execute task in pool
+join()  - Wait for task completion and get result
+invoke() - Execute and wait (fork + join combined)
+
+Work-Stealing:
+--------------
+- Idle threads steal tasks from busy threads' queues
+- Improves CPU utilization
+- Tasks are taken from the tail of other threads' deques

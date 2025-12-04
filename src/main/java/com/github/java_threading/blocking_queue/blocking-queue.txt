@@ -1,0 +1,38 @@
+BlockingQueue
+=============
+
+- Thread-safe interface extending Queue
+- Designed for producer-consumer scenarios
+- Provides blocking operations (wait when full/empty)
+- Does NOT permit null elements (throws NullPointerException)
+
+Implementations:
+----------------
+LinkedBlockingQueue
+- Does not preallocate size (optionally bounded)
+- Uses separate locks: putLock and takeLock
+- Better throughput for high concurrency
+
+ArrayBlockingQueue
+- Pre-allocates fixed size array
+- Uses single ReentrantLock for both put and take
+- More predictable memory usage
+
+Write Operations:
+-----------------
+add(e)    - Throws IllegalStateException if queue is full
+put(e)    - Blocks until space is available (waits indefinitely)
+offer(e)  - Returns false immediately if queue is full (non-blocking)
+
+Read Operations:
+----------------
+take()    - Blocks until element is available
+poll()    - Returns null immediately if queue is empty (non-blocking)
+peek()    - Returns head without removing, null if empty
+
+Use Cases:
+----------
+- Producer-consumer pattern
+- Thread pool task queues
+- Rate limiting
+- Buffering between fast producer and slow consumer

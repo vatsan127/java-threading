@@ -1,4 +1,4 @@
-package com.github.java_threading.fork_join;
+package com.github.java_threading.fork_join.recursive_task;
 
 import java.util.concurrent.RecursiveTask;
 

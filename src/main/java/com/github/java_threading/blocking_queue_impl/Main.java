@@ -6,18 +6,6 @@ import java.util.concurrent.TimeUnit;
 
 public class Main {
 
-    /*
-     * ToDO:
-     *  create a queue with initial capacity
-     *  producer - when the queue capacity is full then wait.
-     *  consumer - when the queue is empty wait until there is an item added.
-     *  producer and consumer should communicate with each other for the events happening
-     *  create a producer thread
-     *  create 2 consumer thread
-     *
-     * */
-
-
     Queue<String> blockingQueue = new LinkedList<>();
     int capacity = 5;
 

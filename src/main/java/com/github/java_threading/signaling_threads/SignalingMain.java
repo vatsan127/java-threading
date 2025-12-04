@@ -1,15 +1,6 @@
-package com.github.java_threading.signaling;
+package com.github.java_threading.signaling_threads;
 
 public class SignalingMain {
-
-    /**
-     * The wait(), notify(), and notifyAll() methods cannot be called on an object unless the calling thread holds the synchronization lock on that object.
-     * They must be called from within a synchronized block or method. If called without holding the lock, an IllegalMonitorStateException is thrown.
-     * When wait() is called, it causes the current thread to release the synchronization lock on that object and enter a waiting state until another thread invokes notify() or notifyAll() on the same object.
-     * Calling notify() wakes up a single thread that is waiting on that object's monitor, while notifyAll() wakes up all threads waiting on that object's monitor.
-     * With notifyAll() lock will be acquired by one of the awakened threads, but which specific thread acquires it is determined by the thread scheduler and JVM implementation.
-     * The awakened thread must re-acquire the lock before resuming execution from the wait() call.
-     */
 
     private static final Object lock = new Object();
 

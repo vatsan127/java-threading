@@ -1,0 +1,35 @@
+Compare-And-Swap (CAS)
+======================
+
+What is CAS?
+------------
+- Low-level atomic operation supported by hardware
+- Compares current value with expected value
+- If equal, updates to new value atomically
+- Returns boolean indicating success/failure
+
+How it works:
+-------------
+compareAndSet(expectedValue, newValue)
+1. Read current value
+2. Compare with expectedValue
+3. If equal, set to newValue and return true
+4. If not equal, return false (another thread modified it)
+
+Spin-Lock Pattern:
+------------------
+while (!lock.compareAndSet(false, true)) {
+    // Keep trying until lock is acquired (busy-waiting)
+}
+
+Advantages:
+-----------
+- No thread blocking (lock-free)
+- No context switching overhead
+- Efficient for low-contention scenarios
+
+Disadvantages:
+--------------
+- Busy-waiting consumes CPU cycles
+- Not suitable for high-contention scenarios
+- Can cause starvation if one thread keeps failing

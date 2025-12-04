@@ -1,0 +1,41 @@
+Custom BlockingQueue Implementation
+====================================
+
+This demonstrates how to implement a blocking queue manually
+using synchronized methods with wait() and notifyAll().
+
+Requirements:
+-------------
+- Fixed capacity queue
+- Producer waits when queue is full
+- Consumer waits when queue is empty
+- Producer and consumer communicate via wait/notify
+
+Implementation Pattern:
+-----------------------
+
+Producer:
+synchronized void produce(item) {
+    while (queue.size() == capacity) {
+        wait();  // Queue full, wait for consumer
+    }
+    queue.add(item);
+    notifyAll();  // Wake up waiting consumers
+}
+
+Consumer:
+synchronized T consume() {
+    while (queue.isEmpty()) {
+        wait();  // Queue empty, wait for producer
+    }
+    T item = queue.poll();
+    notifyAll();  // Wake up waiting producers
+    return item;
+}
+
+Key Points:
+-----------
+- Use while loop (not if) for wait condition (spurious wakeups)
+- Use notifyAll() to wake all waiting threads
+- synchronized on same object for both producer and consumer
+- wait() releases the lock, allowing other threads to proceed

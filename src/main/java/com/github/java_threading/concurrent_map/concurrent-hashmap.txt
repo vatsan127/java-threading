@@ -1,0 +1,39 @@
+ConcurrentMap & ConcurrentHashMap
+=================================
+
+ConcurrentHashMap:
+------------------
+- Thread-safe implementation of Map interface
+- Does NOT lock the entire map for operations
+- Uses segment-based (bucket-level) locking for better concurrency
+- Does NOT permit null keys or values
+
+Basic Operations:
+-----------------
+put(key, value)    - Add or update entry
+get(key)           - Retrieve value
+remove(key)        - Remove entry
+
+Atomic Operations:
+------------------
+putIfAbsent(key, value)
+- Adds entry only if key doesn't already exist
+- Returns null if added, existing value if key exists
+
+replace(key, value)
+- Replaces value only if key exists
+- Returns old value or null
+
+replace(key, oldValue, newValue)
+- Replaces only if current value equals oldValue
+- Returns true if replaced
+
+compute(key, BiFunction)
+- Atomically computes new value using current value
+- Example: map.compute("key", (k, v) -> v + "suffix")
+
+computeIfPresent(key, BiFunction)
+- Computes only if key exists and value is non-null
+
+computeIfAbsent(key, Function)
+- Computes only if key doesn't exist or value is null

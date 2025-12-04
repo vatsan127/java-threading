@@ -1,4 +1,4 @@
-package com.github.java_threading.create;
+package com.github.java_threading.create_threads;
 
 public class MyLambdaFunction {
     public static void main(String[] args) {

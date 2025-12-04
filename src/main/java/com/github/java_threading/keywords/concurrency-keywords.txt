@@ -1,0 +1,28 @@
+Core Concurrency Keywords
+=========================
+
+1. volatile
+-----------
+- Applies only to variables
+- Ensures visibility of changes across threads
+- Does NOT provide atomicity or mutual exclusion
+- Variable is stored directly in RAM rather than being cached
+- All threads see the most recent value
+- Use case: Flags for signaling between threads
+
+2. synchronized
+---------------
+- Can be applied to methods or blocks
+- Provides both visibility AND atomicity
+- Only one thread can execute synchronized code on same lock at a time
+- Static synchronized methods lock on the Class object
+- Instance synchronized methods lock on the instance (this)
+- Synchronized blocks can lock on any object
+
+3. Atomic (java.util.concurrent.atomic)
+---------------------------------------
+- Atomic classes provide lock-free, thread-safe operations
+- Uses compare-and-swap (CAS) hardware instructions
+- Examples: AtomicInteger, AtomicLong, AtomicBoolean, AtomicReference
+- Common methods: get(), set(), incrementAndGet(), compareAndSet()
+- More efficient than synchronized for single variable operations
