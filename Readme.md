@@ -1,80 +1,36 @@
-# Topics
+# Java Threading Concepts
 
-## 1. Thread Creation
+## Project Structure
 
----
-
-## 2. Thread Signaling
-
-- wait()
-- notify()
-- notifyAll()
-
----
-
-## 3.Core Concurrency Keywords
-
-- volatile
-- Atomic (java.util.concurrent.atomic)
-- Synchronized blocks & methods
-
----
-
-## 4. Threading Issues
-
-- Race Condition
-- Deadlocks
-- Deadlock Prevention
-- Thread Congestion
-- False Sharing in Java
-
----
-
-## 5. Concurrency Concepts
-
-- Concurrency vs Parallelism
-- Single-Threaded Designs
-- Compare & Swap (CAS) in Java
-
----
-
-## 6. Thread Management
-
-- Thread Pools
-- ExecutorService
-- Virtual Threads (Project Loom)
-- ForkJoin Pools
-
----
-
-## 7. Java Locks (java.util.concurrent.locks)
-
-- Conditions
-- Monitor Locks
-- ReadWriteLock
-- ReentrantLock
-- Semaphore
-- StampedLock
-
----
-
-## 8. Concurrent Data Structures
-
-- BlockingQueue
-- Java ConcurrentMap & ConcurrentHashMap
-
----
-
-## 9. Producer–Consumer Pattern
-
----
-
-## 10. CyclicBarrier
-
----
-
-## 11. CountDownLatch
-
---- 
-
-## 12. Interrupted Exception
+```
+src/main/java/com/github/java_threading/
+├── Main.java
+├── create_threads/
+│   ├── MyThreadExtends.java
+│   ├── MyThreadImplements.java
+│   ├── MyAnonymousThread.java
+│   └── MyLambdaFunction.java
+├── keywords/
+│   ├── VolatileMain.java
+│   ├── SynchronizedMethodMain.java
+│   └── AtomicMain.java
+├── signaling_threads/
+│   └── SignalingMain.java
+├── compare_and_swap/
+│   └── CASMain.java
+├── concurrent_map/
+│   └── ConcurrentMapMain.java
+├── blocking_queue/
+│   └── BlockingQueueMain.java
+├── blocking_queue_impl/
+│   └── Main.java
+├── fork_join/
+│   ├── recursive_task/
+│   │   ├── MyRecursiveTask.java
+│   │   └── RecursiveTaskMain.java
+│   └── recursive_action/
+│       ├── MyRecursiveAction.java
+│       └── RecursiveActionMain.java
+└── future/
+    └── FutureMain.java
+```
