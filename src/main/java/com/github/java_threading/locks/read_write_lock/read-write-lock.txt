@@ -1,0 +1,177 @@
+ReadWriteLock / ReentrantReadWriteLock
+======================================
+
+WHAT IS IT?
+-----------
+ReadWriteLock maintains a pair of locks - one for reading and one for writing.
+- Read lock (shared): Multiple threads can hold simultaneously
+- Write lock (exclusive): Only one thread can hold, blocks all readers and writers
+
+It's part of java.util.concurrent.locks package.
+
+
+WHEN TO USE?
+------------
+- Read-heavy workloads (90%+ reads, few writes)
+- Caches, configuration data, lookup tables
+- When multiple threads frequently read but rarely modify shared data
+
+Example: A cache that is read by 100 threads but updated by 1 thread occasionally.
+
+
+KEY CHARACTERISTICS
+-------------------
+1. Multiple readers can read concurrently (no blocking between readers)
+2. Writers get exclusive access (blocks all readers and other writers)
+3. Supports fairness mode (FIFO ordering)
+4. IS reentrant (same thread can acquire multiple times)
+5. Supports lock downgrading (write -> read)
+6. Does NOT support lock upgrading (read -> write causes deadlock!)
+
+
+BASIC USAGE
+-----------
+ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+
+// Reading
+rwLock.readLock().lock();
+try {
+    // Read shared data (multiple threads can be here)
+} finally {
+    rwLock.readLock().unlock();
+}
+
+// Writing
+rwLock.writeLock().lock();
+try {
+    // Modify shared data (exclusive access)
+} finally {
+    rwLock.writeLock().unlock();
+}
+
+
+KEY METHODS
+-----------
+ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);  // Fair
+
+// Read lock methods
+lock.readLock().lock()
+lock.readLock().unlock()
+lock.readLock().tryLock()
+lock.readLock().tryLock(timeout, unit)
+
+// Write lock methods
+lock.writeLock().lock()
+lock.writeLock().unlock()
+lock.writeLock().tryLock()
+lock.writeLock().tryLock(timeout, unit)
+
+// Info methods
+lock.getReadLockCount()              // Number of read locks held
+lock.isWriteLocked()                 // Is write lock held?
+lock.isWriteLockedByCurrentThread()  // Does current thread hold write lock?
+lock.getReadHoldCount()              // Read holds by current thread
+lock.getWriteHoldCount()             // Write holds by current thread
+lock.isFair()                        // Is fair mode enabled?
+
+
+LOCK DOWNGRADING (ALLOWED)
+--------------------------
+You CAN downgrade from write lock to read lock:
+
+rwLock.writeLock().lock();      // 1. Acquire write lock
+try {
+    // Modify data
+    data = newValue;
+
+    rwLock.readLock().lock();   // 2. Acquire read lock while holding write
+} finally {
+    rwLock.writeLock().unlock(); // 3. Release write lock (still holding read)
+}
+// Now holding only read lock
+try {
+    // Continue reading safely
+} finally {
+    rwLock.readLock().unlock();  // 4. Release read lock
+}
+
+Why downgrade? To continue reading the data you just wrote without letting
+other writers in, while allowing other readers.
+
+
+LOCK UPGRADING (NOT ALLOWED - DEADLOCK!)
+----------------------------------------
+You CANNOT upgrade from read lock to write lock:
+
+rwLock.readLock().lock();
+rwLock.writeLock().lock();   // DEADLOCK! Waiting for yourself to release read lock
+
+Why? The write lock waits for all readers to release. But you're a reader
+waiting for the write lock. Classic deadlock.
+
+
+FAIR VS UNFAIR MODE
+-------------------
+Unfair (default): new ReentrantReadWriteLock() or new ReentrantReadWriteLock(false)
+- Better throughput
+- Threads may "barge" ahead of waiting threads
+- May cause starvation
+
+Fair: new ReentrantReadWriteLock(true)
+- Threads acquire locks in FIFO order
+- Prevents starvation
+- Lower throughput due to more context switches
+
+
+THREAD-SAFE CACHE EXAMPLE
+-------------------------
+class Cache<K, V> {
+    private final Map<K, V> map = new HashMap<>();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    public V get(K key) {
+        lock.readLock().lock();
+        try {
+            return map.get(key);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public void put(K key, V value) {
+        lock.writeLock().lock();
+        try {
+            map.put(key, value);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+}
+
+
+COMPARISON WITH OTHER LOCKS
+---------------------------
+| Feature           | synchronized | ReentrantLock | ReadWriteLock |
+|-------------------|--------------|---------------|---------------|
+| Multiple readers  | No           | No            | YES           |
+| Reentrant         | Yes          | Yes           | Yes           |
+| Fair mode         | No           | Yes           | Yes           |
+| tryLock           | No           | Yes           | Yes           |
+| Read/write split  | No           | No            | YES           |
+
+
+PERFORMANCE CONSIDERATIONS
+--------------------------
+- Best when reads >> writes (e.g., 95% reads, 5% writes)
+- If writes are frequent, overhead may not be worth it
+- For maximum read performance, consider StampedLock (optimistic reads)
+- Keep critical sections short
+
+
+COMMON PITFALLS
+---------------
+1. Forgetting try-finally for unlock
+2. Trying to upgrade read -> write (deadlock)
+3. Using for write-heavy workloads (overhead not worth it)
+4. Holding locks during I/O or long operations

@@ -76,3 +76,84 @@ Concurrent hashmap map implements Concurrent Map which implements Map
 Hashtable implements Map interface directly.
 All methods in the hashtable are synchronized. So only thread can call a method in the hashtable.
 Multiple Threads can read and write at the same time.
+
+
+Key Lock Types
+
+1. ReentrantLock
+
+- Same thread can acquire the lock multiple times (reentrant)
+- Must be explicitly unlocked the same number of times
+- Supports fairness policy
+
+2. ReadWriteLock / ReentrantReadWriteLock
+
+- Separates read and write access
+- Multiple readers can hold the lock simultaneously
+- Writers get exclusive access
+- Great for read-heavy workloads
+- Supports lock downgrading (write -> read), but NOT upgrading (deadlock!)
+
+3. StampedLock (Java 8+)
+
+- Optimistic read locking (no blocking for reads)
+- Better performance than ReadWriteLock in many cases
+- Not reentrant (same thread acquiring twice = deadlock!)
+- Uses stamps (long values) to track lock state
+
+4. Semaphore
+
+- Controls access through permits (not binary like locks)
+- Can have multiple permits (e.g., connection pool of 10)
+- Any thread can release (not just the acquirer)
+- NOT reentrant
+- Use for: rate limiting, resource pooling, bounded access
+
+5. Condition
+
+- Lock's equivalent of wait()/notify()
+- Created from Lock: condition = lock.newCondition()
+- Multiple conditions per lock (advantage over wait/notify)
+- Must hold lock when calling await()/signal()
+- Always use while loop with await() (spurious wakeups!)
+
+---
+
+Memory Visibility: synchronized vs Lock
+
+Both synchronized and Lock (ReentrantLock, ReadWriteLock, etc.) provide IDENTICAL memory visibility:
+
+- Lock acquire: Invalidates CPU cache, forces read from main memory (RAM)
+- Lock release: Flushes all writes to main memory (RAM)
+
+This is called "happens-before" relationship in Java Memory Model (JMM).
+
+Exception: StampedLock optimistic read
+- tryOptimisticRead() does NOT insert memory barrier
+- No lock is actually acquired, just returns a version stamp
+- Reads may come from CPU cache (L1/L2/L3)
+- validate(stamp) checks if any write happened since stamp
+- If validate() returns true, cached data is consistent (safe to use)
+- This is WHY optimistic read is so fast - avoids expensive memory barriers
+
+Memory barrier cost: ~100+ CPU cycles
+Volatile stamp read: ~1-10 CPU cycles
+
+---
+
+Choosing the Right Lock
+
+| Scenario                          | Use                     |
+|-----------------------------------|-------------------------|
+| Simple mutual exclusion           | synchronized            |
+| Need tryLock/timeout/fairness     | ReentrantLock           |
+| 90%+ reads, few writes            | ReadWriteLock           |
+| Max read performance, no reentry  | StampedLock (optimistic)|
+| Limit concurrent access (pool)    | Semaphore               |
+| Complex wait/notify with locks    | Condition               |
+
+---
+
+race conditions
+deadlock
+

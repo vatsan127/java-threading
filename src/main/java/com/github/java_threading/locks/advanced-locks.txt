@@ -1,0 +1,469 @@
+ADVANCED LOCKING MECHANISMS IN JAVA
+====================================
+
+This document covers ReadWriteLock, StampedLock, Semaphore, and Condition.
+
+================================================================================
+1. ReadWriteLock / ReentrantReadWriteLock
+================================================================================
+
+CONCEPT:
+--------
+ReadWriteLock separates read and write access to a shared resource.
+- Read lock (shared): Multiple threads can hold simultaneously
+- Write lock (exclusive): Only one thread can hold, blocks all readers
+
+WHEN TO USE:
+------------
+- Read-heavy workloads (many reads, few writes)
+- Caches, configuration data, lookup tables
+- When reads vastly outnumber writes (e.g., 95% reads, 5% writes)
+
+KEY CHARACTERISTICS:
+--------------------
+1. Multiple readers can read concurrently
+2. Writers get exclusive access (no readers or other writers)
+3. Supports fairness mode
+4. IS reentrant (same thread can acquire multiple times)
+5. Supports lock downgrading (write -> read)
+6. Does NOT support lock upgrading (read -> write causes deadlock!)
+
+METHODS:
+--------
+ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+// Read lock
+lock.readLock().lock();
+lock.readLock().unlock();
+lock.readLock().tryLock();
+
+// Write lock
+lock.writeLock().lock();
+lock.writeLock().unlock();
+lock.writeLock().tryLock();
+
+// Info methods
+lock.getReadLockCount()     // Number of read locks held
+lock.isWriteLocked()        // Is write lock held?
+lock.isWriteLockedByCurrentThread()
+lock.isFair()
+
+LOCK DOWNGRADING PATTERN:
+-------------------------
+// 1. Acquire write lock
+writeLock.lock();
+try {
+    // 2. Do write operation
+    data = newValue;
+
+    // 3. Acquire read lock while holding write lock
+    readLock.lock();
+} finally {
+    // 4. Release write lock (still holding read)
+    writeLock.unlock();
+}
+// Now holding only read lock
+try {
+    // Use data safely
+} finally {
+    readLock.unlock();
+}
+
+WARNING - NO LOCK UPGRADING:
+----------------------------
+// THIS WILL DEADLOCK!
+readLock.lock();
+writeLock.lock();  // DEADLOCK - waiting for yourself!
+
+
+================================================================================
+2. StampedLock (Java 8+)
+================================================================================
+
+CONCEPT:
+--------
+StampedLock is an advanced lock with three modes:
+1. Write Lock - Exclusive (like ReentrantLock)
+2. Read Lock - Shared (like ReadWriteLock's read lock)
+3. Optimistic Read - Non-blocking validation-based reading
+
+WHEN TO USE:
+------------
+- Very read-heavy workloads
+- When you need maximum read performance
+- When optimistic reading is viable (short read operations)
+- When you DON'T need reentrancy
+
+KEY CHARACTERISTICS:
+--------------------
+1. NOT reentrant (same thread CANNOT acquire twice - will deadlock!)
+2. Supports optimistic reading (huge performance gain)
+3. Uses stamps (long values) for lock state tracking
+4. Better throughput than ReadWriteLock in many scenarios
+5. Supports lock conversion (upgrade/downgrade via stamps)
+
+STAMPS:
+-------
+- Every lock operation returns a stamp (long value)
+- Must use the stamp to unlock
+- Stamp of 0 means lock acquisition failed
+
+BASIC USAGE:
+------------
+StampedLock lock = new StampedLock();
+
+// Write lock
+long stamp = lock.writeLock();
+try {
+    // exclusive access
+} finally {
+    lock.unlockWrite(stamp);
+}
+
+// Read lock
+long stamp = lock.readLock();
+try {
+    // shared access
+} finally {
+    lock.unlockRead(stamp);
+}
+
+OPTIMISTIC READ PATTERN (THE KILLER FEATURE):
+---------------------------------------------
+long stamp = lock.tryOptimisticRead();  // Non-blocking, no actual lock!
+// Read data
+double x = this.x;
+double y = this.y;
+// Validate - check if write happened since stamp
+if (lock.validate(stamp)) {
+    // Success! Data is consistent, no lock was needed
+    return result;
+} else {
+    // A write happened - fallback to pessimistic read
+    stamp = lock.readLock();
+    try {
+        x = this.x;
+        y = this.y;
+    } finally {
+        lock.unlockRead(stamp);
+    }
+}
+
+LOCK CONVERSION:
+----------------
+// Upgrade: read -> write
+long readStamp = lock.readLock();
+long writeStamp = lock.tryConvertToWriteLock(readStamp);
+if (writeStamp != 0L) {
+    // Upgrade successful
+    stamp = writeStamp;
+} else {
+    // Upgrade failed, must release and reacquire
+    lock.unlockRead(readStamp);
+    stamp = lock.writeLock();
+}
+
+// Downgrade: write -> read
+stamp = lock.tryConvertToReadLock(stamp);
+
+COMPARISON WITH ReadWriteLock:
+------------------------------
+| Feature              | ReadWriteLock    | StampedLock        |
+|----------------------|------------------|--------------------|
+| Reentrant            | Yes              | NO                 |
+| Optimistic read      | No               | Yes                |
+| Lock conversion      | Downgrade only   | Both directions    |
+| Performance (reads)  | Good             | Better             |
+| Complexity           | Lower            | Higher             |
+| Use when             | Need reentrancy  | Max read perf      |
+
+
+================================================================================
+3. Semaphore
+================================================================================
+
+CONCEPT:
+--------
+A Semaphore maintains a set of permits. Threads acquire permits to access
+a resource and release them when done. Unlike locks (binary), semaphores
+can have multiple permits.
+
+WHEN TO USE:
+------------
+- Limiting concurrent access (connection pools, rate limiting)
+- Resource pooling
+- Bounded producer-consumer
+- Binary semaphore as mutex (1 permit)
+
+KEY CHARACTERISTICS:
+--------------------
+1. Permit count can be > 1 (unlike locks)
+2. NOT reentrant (each acquire consumes a permit)
+3. Supports fairness mode
+4. Any thread can release (not just the acquirer)
+5. Can release more permits than initially available!
+
+METHODS:
+--------
+Semaphore sem = new Semaphore(permits);
+Semaphore sem = new Semaphore(permits, true);  // Fair
+
+sem.acquire()              // Block until permit available
+sem.acquire(n)             // Acquire n permits
+sem.tryAcquire()           // Non-blocking
+sem.tryAcquire(timeout, unit)  // With timeout
+sem.release()              // Return one permit
+sem.release(n)             // Return n permits
+sem.availablePermits()     // Current available
+sem.drainPermits()         // Acquire all available
+
+BASIC USAGE:
+------------
+// Limit to 3 concurrent database connections
+Semaphore connLimit = new Semaphore(3);
+
+void useDatabase() {
+    connLimit.acquire();  // Wait for permit
+    try {
+        // Use connection
+    } finally {
+        connLimit.release();  // Return permit
+    }
+}
+
+BINARY SEMAPHORE (MUTEX):
+-------------------------
+Semaphore mutex = new Semaphore(1);
+
+mutex.acquire();
+try {
+    // Critical section
+} finally {
+    mutex.release();
+}
+
+// NOTE: Unlike ReentrantLock, this is NOT reentrant!
+// Same thread acquiring twice will deadlock
+
+CONNECTION POOL PATTERN:
+------------------------
+class ConnectionPool {
+    private final Semaphore available;
+    private final Connection[] connections;
+
+    ConnectionPool(int size) {
+        available = new Semaphore(size);
+        connections = new Connection[size];
+        // Initialize connections...
+    }
+
+    Connection getConnection() throws InterruptedException {
+        available.acquire();
+        return getNextAvailable();
+    }
+
+    void releaseConnection(Connection c) {
+        markAsUnused(c);
+        available.release();
+    }
+}
+
+COMPARISON WITH LOCKS:
+----------------------
+| Feature              | Lock             | Semaphore          |
+|----------------------|------------------|--------------------|
+| Permits              | 1 (binary)       | N (configurable)   |
+| Reentrant            | Yes (Reentrant*) | No                 |
+| Owner tracking       | Yes              | No                 |
+| Who can release      | Owner only       | Any thread         |
+| Use case             | Mutual exclusion | Resource limiting  |
+
+
+================================================================================
+4. Condition
+================================================================================
+
+CONCEPT:
+--------
+Condition provides thread signaling capability tied to a Lock.
+It's the Lock equivalent of Object's wait()/notify()/notifyAll().
+
+WHEN TO USE:
+------------
+- Need wait/notify with explicit locks
+- Need multiple wait conditions per lock
+- Producer-consumer patterns
+- Any coordination requiring "wait until condition is true"
+
+KEY CHARACTERISTICS:
+--------------------
+1. Created from a Lock: condition = lock.newCondition()
+2. Multiple conditions per lock (unlike wait/notify)
+3. Must hold the lock when calling await/signal
+4. await() releases the lock and waits
+5. signal()/signalAll() wakes waiting threads
+
+METHODS:
+--------
+Lock lock = new ReentrantLock();
+Condition condition = lock.newCondition();
+
+condition.await()                     // Wait, release lock
+condition.await(time, unit)           // Wait with timeout
+condition.awaitNanos(nanosTimeout)    // Wait with nanos
+condition.awaitUntil(deadline)        // Wait until date
+condition.awaitUninterruptibly()      // Wait, ignore interrupts
+condition.signal()                    // Wake one waiter
+condition.signalAll()                 // Wake all waiters
+
+BASIC PATTERN:
+--------------
+// Waiting thread
+lock.lock();
+try {
+    while (!conditionMet) {  // ALWAYS use while loop!
+        condition.await();
+    }
+    // Proceed with work
+} finally {
+    lock.unlock();
+}
+
+// Signaling thread
+lock.lock();
+try {
+    // Change state
+    conditionMet = true;
+    condition.signal();  // or signalAll()
+} finally {
+    lock.unlock();
+}
+
+BOUNDED BUFFER (CLASSIC EXAMPLE):
+---------------------------------
+class BoundedBuffer<T> {
+    private final Lock lock = new ReentrantLock();
+    private final Condition notFull = lock.newCondition();
+    private final Condition notEmpty = lock.newCondition();
+    private final Queue<T> queue = new LinkedList<>();
+    private final int capacity;
+
+    void put(T item) throws InterruptedException {
+        lock.lock();
+        try {
+            while (queue.size() == capacity) {
+                notFull.await();  // Wait for space
+            }
+            queue.add(item);
+            notEmpty.signal();  // Signal consumers
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    T take() throws InterruptedException {
+        lock.lock();
+        try {
+            while (queue.isEmpty()) {
+                notEmpty.await();  // Wait for items
+            }
+            T item = queue.remove();
+            notFull.signal();  // Signal producers
+            return item;
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+
+WHY WHILE LOOP FOR await()?
+---------------------------
+1. Spurious wakeups - await() can return without signal
+2. Multiple waiters - another thread might consume the condition
+3. Always re-check the condition after waking up!
+
+COMPARISON WITH wait()/notify():
+--------------------------------
+| Feature              | wait/notify      | Condition          |
+|----------------------|------------------|--------------------|
+| Associated with      | Object monitor   | Lock object        |
+| Multiple conditions  | No               | Yes                |
+| Flexibility          | Basic            | High               |
+| Timeout precision    | milliseconds     | nanoseconds        |
+| Interruptibility     | Always           | Configurable       |
+
+
+================================================================================
+CHOOSING THE RIGHT LOCK
+================================================================================
+
+Use synchronized:
+- Simple critical sections
+- Don't need tryLock, timeout, or fairness
+- Code readability is priority
+
+Use ReentrantLock:
+- Need tryLock, timeout, or fairness
+- Need interruptible lock acquisition
+- Need multiple conditions
+- Need lock polling
+
+Use ReadWriteLock:
+- Read-heavy workloads (>90% reads)
+- Need reentrancy
+- Reads can be concurrent, writes need exclusivity
+
+Use StampedLock:
+- Maximum read performance needed
+- Can use optimistic reading
+- DON'T need reentrancy
+- Short, fast read operations
+
+Use Semaphore:
+- Limiting concurrent access to resource
+- Connection pooling
+- Rate limiting
+- Multiple permits needed
+
+Use Condition:
+- Complex thread coordination
+- Multiple wait conditions needed
+- Producer-consumer with explicit locks
+
+
+================================================================================
+COMMON PITFALLS
+================================================================================
+
+1. Forgetting try-finally for unlock
+   ALWAYS unlock in finally block!
+
+2. Lock upgrading with ReadWriteLock
+   CANNOT upgrade read -> write (deadlock!)
+
+3. StampedLock reentrancy
+   Same thread acquiring twice = deadlock!
+
+4. Not using while loop with await()
+   Spurious wakeups will cause bugs!
+
+5. Holding locks during long operations
+   Keep critical sections short!
+
+6. Semaphore release without acquire
+   Can increase permits beyond initial count!
+
+7. Condition await without holding lock
+   Will throw IllegalMonitorStateException!
+
+
+================================================================================
+PERFORMANCE TIPS
+================================================================================
+
+1. Keep critical sections short
+2. Use StampedLock optimistic read for read-heavy scenarios
+3. Consider fair locks only when starvation is a concern
+4. Use read/write locks when reads >> writes
+5. Prefer tryLock with timeout over blocking acquire
+6. Use Condition over wait/notify for clarity

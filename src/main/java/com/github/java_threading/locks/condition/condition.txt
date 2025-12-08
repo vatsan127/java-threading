@@ -1,0 +1,328 @@
+Condition
+=========
+
+WHAT IS IT?
+-----------
+Condition provides thread coordination/signaling tied to a Lock.
+It's the Lock equivalent of Object's wait()/notify()/notifyAll().
+
+Created from a Lock: Condition condition = lock.newCondition();
+
+
+WHEN TO USE?
+------------
+- Producer-consumer patterns with explicit locks
+- Complex thread coordination
+- Need multiple wait conditions per lock
+- When using ReentrantLock and need signaling
+
+
+KEY CHARACTERISTICS
+-------------------
+1. Created from Lock: condition = lock.newCondition()
+2. Multiple conditions per lock (MAJOR advantage over wait/notify)
+3. Must hold the lock when calling await()/signal()
+4. await() releases the lock and waits
+5. signal()/signalAll() wakes waiting threads
+6. More flexible than wait/notify
+
+
+COMPARISON: wait/notify vs Condition
+------------------------------------
+| Feature              | wait/notify      | Condition          |
+|----------------------|------------------|--------------------|
+| Associated with      | Object monitor   | Lock object        |
+| Multiple conditions  | NO               | YES                |
+| Must hold lock       | Yes (synchronized)| Yes (lock.lock()) |
+| Timeout precision    | milliseconds     | nanoseconds        |
+| Interruptibility     | Always           | Configurable       |
+| API clarity          | Confusing        | Clear              |
+
+
+BASIC USAGE
+-----------
+Lock lock = new ReentrantLock();
+Condition condition = lock.newCondition();
+
+// Waiting thread
+lock.lock();
+try {
+    while (!conditionMet) {     // ALWAYS use while loop!
+        condition.await();       // Releases lock, waits for signal
+    }
+    // Condition is now true, proceed
+} finally {
+    lock.unlock();
+}
+
+// Signaling thread
+lock.lock();
+try {
+    conditionMet = true;
+    condition.signal();          // Wake one waiter
+    // OR condition.signalAll(); // Wake all waiters
+} finally {
+    lock.unlock();
+}
+
+
+KEY METHODS
+-----------
+Lock lock = new ReentrantLock();
+Condition condition = lock.newCondition();
+
+// Waiting methods
+condition.await()                        // Wait, release lock (interruptible)
+condition.awaitUninterruptibly()         // Wait, ignore interrupts
+condition.await(time, unit)              // Wait with timeout, returns boolean
+condition.awaitNanos(nanosTimeout)       // Wait with nanos timeout
+condition.awaitUntil(deadline)           // Wait until Date
+
+// Signaling methods
+condition.signal()                       // Wake ONE waiting thread
+condition.signalAll()                    // Wake ALL waiting threads
+
+
+WHY USE WHILE LOOP WITH await()?
+--------------------------------
+ALWAYS check condition in a while loop, not if:
+
+// WRONG!
+if (!conditionMet) {
+    condition.await();
+}
+
+// CORRECT!
+while (!conditionMet) {
+    condition.await();
+}
+
+Reasons:
+1. Spurious wakeups - await() can return without signal
+2. Multiple waiters - another thread might consume the condition first
+3. State might change between signal and wakeup
+
+
+MULTIPLE CONDITIONS - THE KILLER FEATURE
+----------------------------------------
+With synchronized/wait/notify, you have ONE wait set per object.
+With Condition, you can have MULTIPLE conditions per lock!
+
+class BoundedBuffer<T> {
+    private final Lock lock = new ReentrantLock();
+    private final Condition notFull = lock.newCondition();   // Producers wait here
+    private final Condition notEmpty = lock.newCondition();  // Consumers wait here
+
+    void put(T item) {
+        lock.lock();
+        try {
+            while (isFull()) {
+                notFull.await();    // Wait for space
+            }
+            add(item);
+            notEmpty.signal();      // Signal consumers
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    T take() {
+        lock.lock();
+        try {
+            while (isEmpty()) {
+                notEmpty.await();   // Wait for items
+            }
+            T item = remove();
+            notFull.signal();       // Signal producers
+            return item;
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+
+
+signal() VS signalAll()
+-----------------------
+signal():
+- Wakes ONE waiting thread (arbitrary choice)
+- Use when any one waiter can handle the state change
+- More efficient (less context switching)
+
+signalAll():
+- Wakes ALL waiting threads
+- Use when state change could satisfy multiple waiters
+- Use when waiters have different conditions
+- Safer choice when unsure
+
+
+AWAIT WITH TIMEOUT
+------------------
+lock.lock();
+try {
+    while (!conditionMet) {
+        boolean signaled = condition.await(1, TimeUnit.SECONDS);
+        if (!signaled) {
+            // Timeout occurred
+            break;  // or handle timeout
+        }
+    }
+} finally {
+    lock.unlock();
+}
+
+
+BOUNDED BUFFER - COMPLETE EXAMPLE
+---------------------------------
+class BoundedBuffer<T> {
+    private final Queue<T> queue = new LinkedList<>();
+    private final int capacity;
+    private final Lock lock = new ReentrantLock();
+    private final Condition notFull = lock.newCondition();
+    private final Condition notEmpty = lock.newCondition();
+
+    public BoundedBuffer(int capacity) {
+        this.capacity = capacity;
+    }
+
+    public void put(T item) throws InterruptedException {
+        lock.lock();
+        try {
+            while (queue.size() == capacity) {
+                System.out.println("Buffer full, producer waiting...");
+                notFull.await();
+            }
+            queue.add(item);
+            notEmpty.signal();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public T take() throws InterruptedException {
+        lock.lock();
+        try {
+            while (queue.isEmpty()) {
+                System.out.println("Buffer empty, consumer waiting...");
+                notEmpty.await();
+            }
+            T item = queue.remove();
+            notFull.signal();
+            return item;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public int size() {
+        lock.lock();
+        try {
+            return queue.size();
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+
+
+COMMON PATTERNS
+---------------
+
+1. Simple Gate Pattern:
+-----------------------
+class Gate {
+    private final Lock lock = new ReentrantLock();
+    private final Condition opened = lock.newCondition();
+    private boolean isOpen = false;
+
+    void open() {
+        lock.lock();
+        try {
+            isOpen = true;
+            opened.signalAll();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    void await() throws InterruptedException {
+        lock.lock();
+        try {
+            while (!isOpen) {
+                opened.await();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+
+2. State Machine Pattern:
+-------------------------
+class StateMachine {
+    private final Lock lock = new ReentrantLock();
+    private final Condition stateChanged = lock.newCondition();
+    private State state = State.INITIAL;
+
+    void waitForState(State target) throws InterruptedException {
+        lock.lock();
+        try {
+            while (state != target) {
+                stateChanged.await();
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    void setState(State newState) {
+        lock.lock();
+        try {
+            state = newState;
+            stateChanged.signalAll();
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+
+
+COMMON PITFALLS
+---------------
+1. Not holding lock when calling await/signal
+   condition.await();  // IllegalMonitorStateException!
+
+   // CORRECT:
+   lock.lock();
+   try {
+       condition.await();
+   } finally {
+       lock.unlock();
+   }
+
+2. Using if instead of while for await
+   if (!ready) condition.await();  // WRONG - spurious wakeups!
+   while (!ready) condition.await();  // CORRECT
+
+3. Forgetting to signal
+   // Producer adds item but forgets to signal
+   queue.add(item);
+   // Consumer waits forever!
+
+4. Signaling without state change
+   condition.signal();  // Signal but condition still false
+   // Waiter wakes up, checks condition, goes back to wait - wasted cycle
+
+5. Using wrong condition
+   notFull.await();     // Producer should wait on notFull
+   notFull.signal();    // But signal should be on notEmpty for consumers!
+
+
+INTERRUPTIBLE VS UNINTERRUPTIBLE
+--------------------------------
+await() - can be interrupted, throws InterruptedException
+awaitUninterruptibly() - ignores interrupts, never throws
+
+Use awaitUninterruptibly() when:
+- You must complete waiting regardless of interrupts
+- You'll handle interrupt after the await returns

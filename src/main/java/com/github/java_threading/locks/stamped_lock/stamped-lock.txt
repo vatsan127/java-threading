@@ -1,0 +1,249 @@
+StampedLock (Java 8+)
+=====================
+
+WHAT IS IT?
+-----------
+StampedLock is a capability-based lock with three modes:
+1. Write Lock - Exclusive access (like ReentrantLock)
+2. Read Lock - Shared access (like ReadWriteLock's read lock)
+3. Optimistic Read - Non-blocking, validation-based reading (THE KILLER FEATURE!)
+
+Every lock operation returns a "stamp" (long value) used to unlock or validate.
+
+
+WHEN TO USE?
+------------
+- Very read-heavy workloads needing maximum performance
+- When optimistic reading is viable (short read operations)
+- When you DON'T need reentrancy
+- High-contention scenarios where ReadWriteLock bottlenecks
+
+
+KEY CHARACTERISTICS
+-------------------
+1. NOT reentrant (same thread acquiring twice = DEADLOCK!)
+2. Supports optimistic reading (huge performance benefit)
+3. Uses stamps (long values) to track lock state
+4. Better throughput than ReadWriteLock in many scenarios
+5. Supports lock conversion (upgrade/downgrade via stamps)
+6. Stamp of 0 means lock acquisition failed
+
+
+BASIC USAGE
+-----------
+StampedLock lock = new StampedLock();
+
+// Write lock
+long stamp = lock.writeLock();
+try {
+    // Exclusive access
+} finally {
+    lock.unlockWrite(stamp);  // Must pass stamp!
+}
+
+// Read lock
+long stamp = lock.readLock();
+try {
+    // Shared access
+} finally {
+    lock.unlockRead(stamp);  // Must pass stamp!
+}
+
+
+OPTIMISTIC READ - THE KILLER FEATURE
+------------------------------------
+Optimistic read doesn't actually acquire a lock!
+It just gets a stamp and later validates if data changed.
+
+long stamp = lock.tryOptimisticRead();  // Non-blocking, no actual lock!
+// Read data (may come from CPU cache!)
+double x = this.x;
+double y = this.y;
+// Validate - check if a write happened
+if (lock.validate(stamp)) {
+    // SUCCESS! No write happened, data is consistent
+    return result;
+} else {
+    // FAILED! A write happened, must retry or fallback
+}
+
+
+WHY IS OPTIMISTIC READ FAST?
+----------------------------
+- NO memory barrier (no cache flush/invalidate)
+- NO actual lock acquisition
+- Just reads a volatile stamp value
+
+Cost comparison:
+- Memory barrier: ~100+ CPU cycles
+- Volatile stamp read: ~1-10 CPU cycles
+
+This is why StampedLock can massively outperform ReadWriteLock!
+
+
+OPTIMISTIC READ WITH FALLBACK (RECOMMENDED PATTERN)
+---------------------------------------------------
+long stamp = lock.tryOptimisticRead();
+double currentX = x;
+double currentY = y;
+
+if (!lock.validate(stamp)) {
+    // Optimistic failed - fallback to pessimistic read
+    stamp = lock.readLock();
+    try {
+        currentX = x;
+        currentY = y;
+    } finally {
+        lock.unlockRead(stamp);
+    }
+}
+// Use currentX, currentY safely
+
+
+LOCK CONVERSION
+---------------
+StampedLock supports converting between lock modes:
+
+// Upgrade: read -> write
+long stamp = lock.readLock();
+long writeStamp = lock.tryConvertToWriteLock(stamp);
+if (writeStamp != 0L) {
+    stamp = writeStamp;  // Upgrade successful!
+} else {
+    // Upgrade failed - must release and reacquire
+    lock.unlockRead(stamp);
+    stamp = lock.writeLock();
+}
+
+// Downgrade: write -> read
+long readStamp = lock.tryConvertToReadLock(stamp);
+if (readStamp != 0L) {
+    stamp = readStamp;  // Downgrade successful!
+}
+
+// Convert optimistic -> read
+long readStamp = lock.tryConvertToReadLock(optimisticStamp);
+
+
+KEY METHODS
+-----------
+StampedLock lock = new StampedLock();
+
+// Write lock
+long stamp = lock.writeLock()
+long stamp = lock.tryWriteLock()
+long stamp = lock.tryWriteLock(timeout, unit)
+lock.unlockWrite(stamp)
+
+// Read lock
+long stamp = lock.readLock()
+long stamp = lock.tryReadLock()
+long stamp = lock.tryReadLock(timeout, unit)
+lock.unlockRead(stamp)
+
+// Optimistic read
+long stamp = lock.tryOptimisticRead()
+boolean valid = lock.validate(stamp)
+
+// Conversions
+long newStamp = lock.tryConvertToWriteLock(stamp)
+long newStamp = lock.tryConvertToReadLock(stamp)
+long newStamp = lock.tryConvertToOptimisticRead(stamp)
+
+// Generic unlock (works with any stamp type)
+lock.unlock(stamp)
+
+// Info
+lock.isWriteLocked()
+lock.isReadLocked()
+lock.getReadLockCount()
+
+
+MEMORY VISIBILITY
+-----------------
+| Operation          | Memory Barrier? |
+|--------------------|-----------------|
+| writeLock()        | YES (acquire)   |
+| unlockWrite()      | YES (release)   |
+| readLock()         | YES (acquire)   |
+| unlockRead()       | YES (release)   |
+| tryOptimisticRead()| NO!             |
+| validate()         | NO!             |
+
+Optimistic read has no memory barrier - data may come from CPU cache.
+This is safe because validate() checks if any write happened.
+
+
+COMPARISON: ReadWriteLock vs StampedLock
+----------------------------------------
+| Feature              | ReadWriteLock    | StampedLock        |
+|----------------------|------------------|--------------------|
+| Reentrant            | YES              | NO                 |
+| Optimistic read      | NO               | YES                |
+| Lock conversion      | Downgrade only   | Both directions    |
+| Performance (reads)  | Good             | Better             |
+| Complexity           | Lower            | Higher             |
+| Memory barriers      | Always           | Optional (opt.)    |
+
+
+WHEN NOT TO USE STAMPEDLOCK
+---------------------------
+1. Need reentrancy (same thread acquiring lock twice)
+2. Simple use cases where ReadWriteLock is sufficient
+3. When you can't handle optimistic read failures
+
+
+COMMON PITFALLS
+---------------
+1. Reentrancy deadlock - same thread can't acquire twice!
+   long s1 = lock.writeLock();
+   long s2 = lock.writeLock();  // DEADLOCK!
+
+2. Forgetting to validate optimistic reads
+   long stamp = lock.tryOptimisticRead();
+   int x = this.x;
+   // WRONG - must call validate(stamp)!
+
+3. Using wrong unlock method
+   long stamp = lock.writeLock();
+   lock.unlockRead(stamp);  // WRONG! Use unlockWrite()
+
+4. Ignoring failed conversions
+   long writeStamp = lock.tryConvertToWriteLock(stamp);
+   // writeStamp could be 0 (failed) - must check!
+
+
+PRACTICAL EXAMPLE: Point Class
+------------------------------
+class Point {
+    private double x, y;
+    private final StampedLock lock = new StampedLock();
+
+    void move(double deltaX, double deltaY) {
+        long stamp = lock.writeLock();
+        try {
+            x += deltaX;
+            y += deltaY;
+        } finally {
+            lock.unlockWrite(stamp);
+        }
+    }
+
+    double distanceFromOrigin() {
+        // Try optimistic first
+        long stamp = lock.tryOptimisticRead();
+        double currentX = x, currentY = y;
+
+        if (!lock.validate(stamp)) {
+            // Fallback to read lock
+            stamp = lock.readLock();
+            try {
+                currentX = x;
+                currentY = y;
+            } finally {
+                lock.unlockRead(stamp);
+            }
+        }
+        return Math.sqrt(currentX * currentX + currentY * currentY);
+    }
+}

@@ -1,0 +1,264 @@
+================================================================================
+                              REENTRANT LOCK
+================================================================================
+
+ReentrantLock is an explicit lock implementation in java.util.concurrent.locks
+that provides more flexibility than the synchronized keyword.
+
+================================================================================
+1. WHAT IS REENTRANT LOCK?
+================================================================================
+
+- A mutual exclusion lock with the same basic behavior as synchronized
+- "Reentrant" means the same thread can acquire the lock multiple times
+- Must be explicitly locked and unlocked (unlike synchronized)
+- Provides additional features: tryLock, timeout, fairness, conditions
+
+Import:
+    import java.util.concurrent.locks.ReentrantLock;
+
+Creating:
+    ReentrantLock lock = new ReentrantLock();        // Non-fair (default)
+    ReentrantLock lock = new ReentrantLock(true);   // Fair lock
+
+================================================================================
+2. BASIC USAGE PATTERN
+================================================================================
+
+CRITICAL: Always use try-finally to ensure unlock happens!
+
+    lock.lock();          // Acquire lock (blocks if unavailable)
+    try {
+        // Critical section - only one thread can execute this at a time
+    } finally {
+        lock.unlock();    // ALWAYS unlock in finally block
+    }
+
+Why try-finally?
+- If an exception occurs in the critical section, the lock is still released
+- Prevents deadlocks from unreleased locks
+
+================================================================================
+3. KEY METHODS
+================================================================================
+
+LOCKING METHODS:
+----------------
+lock()                  - Acquires lock, blocks until available
+unlock()                - Releases lock (must be called same number of times as lock)
+tryLock()               - Tries to acquire, returns immediately (true/false)
+tryLock(time, unit)     - Tries to acquire with timeout
+lockInterruptibly()     - Acquires lock but can be interrupted while waiting
+
+INFORMATION METHODS:
+--------------------
+isLocked()              - Returns true if lock is held by any thread
+isHeldByCurrentThread() - Returns true if current thread holds the lock
+getHoldCount()          - Number of times current thread has locked
+hasQueuedThreads()      - Returns true if threads are waiting for lock
+getQueueLength()        - Approximate number of waiting threads
+isFair()                - Returns true if this is a fair lock
+
+================================================================================
+4. REENTRANT BEHAVIOR
+================================================================================
+
+The same thread can acquire the lock multiple times:
+
+    lock.lock();                    // Hold count = 1
+    lock.lock();                    // Hold count = 2 (same thread, allowed!)
+    lock.lock();                    // Hold count = 3
+
+    lock.unlock();                  // Hold count = 2
+    lock.unlock();                  // Hold count = 1
+    lock.unlock();                  // Hold count = 0, lock released
+
+IMPORTANT: You must unlock the same number of times you locked!
+
+Why is this useful?
+- Allows recursive method calls that need the same lock
+- A synchronized method can call another synchronized method on same object
+
+    public void outerMethod() {
+        lock.lock();
+        try {
+            innerMethod();  // This works because lock is reentrant
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void innerMethod() {
+        lock.lock();  // Same thread can acquire again
+        try {
+            // do work
+        } finally {
+            lock.unlock();
+        }
+    }
+
+================================================================================
+5. TRY LOCK (NON-BLOCKING)
+================================================================================
+
+tryLock() attempts to acquire without blocking:
+
+    if (lock.tryLock()) {
+        try {
+            // Got the lock, do work
+        } finally {
+            lock.unlock();
+        }
+    } else {
+        // Lock not available, do something else
+    }
+
+Use cases:
+- Avoid blocking when lock might be held for a long time
+- Implement timeout-based operations
+- Prevent deadlocks by backing off
+
+================================================================================
+6. TRY LOCK WITH TIMEOUT
+================================================================================
+
+Wait for a specified time before giving up:
+
+    try {
+        if (lock.tryLock(1, TimeUnit.SECONDS)) {
+            try {
+                // Got the lock within 1 second
+            } finally {
+                lock.unlock();
+            }
+        } else {
+            // Timeout - lock not available within 1 second
+        }
+    } catch (InterruptedException e) {
+        // Thread was interrupted while waiting
+        Thread.currentThread().interrupt();
+    }
+
+================================================================================
+7. FAIR VS UNFAIR LOCKS
+================================================================================
+
+UNFAIR LOCK (default):
+    ReentrantLock lock = new ReentrantLock();
+    ReentrantLock lock = new ReentrantLock(false);
+
+    - Threads may acquire lock out of order
+    - A thread that just released can immediately reacquire
+    - Higher throughput but can cause starvation
+    - Recommended for most use cases
+
+FAIR LOCK:
+    ReentrantLock lock = new ReentrantLock(true);
+
+    - Threads acquire lock in FIFO order (longest-waiting first)
+    - Prevents starvation
+    - Lower throughput due to ordering overhead
+    - Use when fairness is more important than performance
+
+================================================================================
+8. REENTRANT LOCK VS SYNCHRONIZED
+================================================================================
+
++---------------------------+-------------------+------------------------+
+|         Feature           |   synchronized    |     ReentrantLock      |
++---------------------------+-------------------+------------------------+
+| Lock acquisition          | Automatic         | Manual (lock/unlock)   |
+| Release on exception      | Automatic         | Manual (use finally)   |
+| Try to acquire            | Not possible      | tryLock()              |
+| Timeout                   | Not possible      | tryLock(time, unit)    |
+| Interruptible wait        | Not possible      | lockInterruptibly()    |
+| Fairness                  | No control        | Configurable           |
+| Multiple conditions       | No (one wait set) | Yes (newCondition())   |
+| Performance               | Optimized by JVM  | Slightly more overhead |
+| Lock across methods       | Complex           | Easy (same lock object)|
+| Debugging info            | Limited           | Rich (queue length etc)|
++---------------------------+-------------------+------------------------+
+
+WHEN TO USE synchronized:
+- Simple locking needs
+- Short critical sections
+- No need for advanced features
+
+WHEN TO USE ReentrantLock:
+- Need tryLock or timeout
+- Need interruptible lock acquisition
+- Need fairness guarantee
+- Need multiple condition variables
+- Need to lock in one method and unlock in another
+
+================================================================================
+9. COMMON MISTAKES TO AVOID
+================================================================================
+
+MISTAKE 1: Forgetting to unlock
+    lock.lock();
+    doSomething();  // If this throws, lock is never released!
+    lock.unlock();
+
+    FIX: Always use try-finally
+
+MISTAKE 2: Unlocking without locking
+    lock.unlock();  // IllegalMonitorStateException!
+
+    FIX: Ensure lock() is called before unlock()
+
+MISTAKE 3: Unbalanced lock/unlock in reentrant scenarios
+    lock.lock();
+    lock.lock();
+    lock.unlock();  // Lock still held! (hold count = 1)
+
+    FIX: Match every lock() with an unlock()
+
+MISTAKE 4: Creating new lock instance each time
+    public void method() {
+        ReentrantLock lock = new ReentrantLock();  // WRONG! New lock each call
+        lock.lock();
+        ...
+    }
+
+    FIX: Make the lock a field (instance or class variable)
+
+================================================================================
+10. BEST PRACTICES
+================================================================================
+
+1. Always use try-finally pattern
+2. Keep critical sections as short as possible
+3. Don't call unknown/external code while holding lock
+4. Use timeout-based tryLock to prevent deadlocks
+5. Prefer synchronized for simple cases
+6. Use ReentrantLock when you need its advanced features
+7. Document which lock protects which data
+8. Consider using higher-level concurrency utilities when possible
+
+================================================================================
+11. CONDITION VARIABLES (PREVIEW)
+================================================================================
+
+ReentrantLock supports multiple Condition objects for wait/notify:
+
+    ReentrantLock lock = new ReentrantLock();
+    Condition notEmpty = lock.newCondition();
+    Condition notFull = lock.newCondition();
+
+    // Producer
+    lock.lock();
+    try {
+        while (queue.isFull()) {
+            notFull.await();        // Wait until not full
+        }
+        queue.add(item);
+        notEmpty.signal();          // Signal that queue is not empty
+    } finally {
+        lock.unlock();
+    }
+
+This allows separate wait sets for different conditions (more flexible than
+synchronized which has only one wait set per object).
+
+================================================================================

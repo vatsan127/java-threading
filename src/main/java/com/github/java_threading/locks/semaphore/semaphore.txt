@@ -1,0 +1,233 @@
+Semaphore
+=========
+
+WHAT IS IT?
+-----------
+A Semaphore maintains a set of permits. Threads must acquire permits to proceed
+and release them when done.
+
+Unlike locks (binary - locked/unlocked), semaphores can have MULTIPLE permits.
+
+Think of it as a bouncer at a club with limited capacity:
+- acquire() = enter (wait if full)
+- release() = exit (let someone else in)
+
+
+WHEN TO USE?
+------------
+- Limiting concurrent access to a resource (connection pools, rate limiting)
+- Resource pooling (database connections, thread pools)
+- Bounded producer-consumer
+- Binary semaphore as mutex (1 permit)
+
+
+KEY CHARACTERISTICS
+-------------------
+1. Permit count can be > 1 (unlike locks)
+2. NOT reentrant (each acquire consumes a permit, even same thread)
+3. Supports fairness mode (FIFO ordering)
+4. ANY thread can release (not just the one that acquired)
+5. Can release more permits than initially available!
+6. No ownership tracking (unlike locks)
+
+
+BASIC USAGE
+-----------
+// Create semaphore with 3 permits
+Semaphore semaphore = new Semaphore(3);
+
+// Acquire permit (blocks if none available)
+semaphore.acquire();
+try {
+    // Access shared resource
+} finally {
+    semaphore.release();  // Return permit
+}
+
+
+KEY METHODS
+-----------
+Semaphore sem = new Semaphore(permits);
+Semaphore sem = new Semaphore(permits, true);  // Fair
+
+// Acquire
+sem.acquire()                      // Block until permit available
+sem.acquire(n)                     // Acquire n permits
+sem.acquireUninterruptibly()       // Block, ignore interrupts
+sem.tryAcquire()                   // Non-blocking, returns boolean
+sem.tryAcquire(timeout, unit)      // With timeout
+sem.tryAcquire(n, timeout, unit)   // Multiple permits with timeout
+
+// Release
+sem.release()                      // Return one permit
+sem.release(n)                     // Return n permits
+
+// Info
+sem.availablePermits()             // Current available permits
+sem.drainPermits()                 // Acquire all available, return count
+sem.hasQueuedThreads()             // Are threads waiting?
+sem.getQueueLength()               // Approximate waiting threads
+sem.isFair()                       // Is fair mode enabled?
+
+
+BINARY SEMAPHORE (MUTEX)
+------------------------
+Semaphore with 1 permit acts like a lock:
+
+Semaphore mutex = new Semaphore(1);
+
+mutex.acquire();
+try {
+    // Critical section
+} finally {
+    mutex.release();
+}
+
+IMPORTANT: Unlike ReentrantLock, binary semaphore is NOT reentrant!
+Same thread acquiring twice will BLOCK (not deadlock, just wait forever).
+
+
+CONNECTION POOL PATTERN
+-----------------------
+class ConnectionPool {
+    private final Semaphore available;
+    private final Connection[] connections;
+    private final boolean[] used;
+
+    ConnectionPool(int size) {
+        available = new Semaphore(size, true);  // Fair
+        connections = new Connection[size];
+        // Initialize connections...
+    }
+
+    Connection getConnection() throws InterruptedException {
+        available.acquire();        // Wait for permit
+        return getNextAvailable();  // Get actual connection
+    }
+
+    void releaseConnection(Connection c) {
+        markAsUnused(c);           // Return to pool
+        available.release();        // Return permit
+    }
+}
+
+
+RATE LIMITING PATTERN
+---------------------
+// Allow max 10 requests per second
+Semaphore rateLimiter = new Semaphore(10);
+
+void processRequest(Request req) throws InterruptedException {
+    rateLimiter.acquire();
+    try {
+        // Process request
+    } finally {
+        // Schedule permit release after 1 second
+        scheduler.schedule(() -> rateLimiter.release(), 1, TimeUnit.SECONDS);
+    }
+}
+
+
+FAIR VS UNFAIR MODE
+-------------------
+Unfair (default): new Semaphore(n) or new Semaphore(n, false)
+- Better throughput
+- Permits may be given to any waiting or arriving thread
+- May cause starvation
+
+Fair: new Semaphore(n, true)
+- Threads acquire permits in FIFO order
+- Prevents starvation
+- Lower throughput
+
+
+MULTIPLE PERMITS
+----------------
+Semaphore sem = new Semaphore(10);
+
+sem.acquire(3);    // Acquire 3 permits at once
+sem.release(3);    // Release 3 permits
+
+// WARNING: Can release more than acquired!
+sem.release(5);    // Increases total permits beyond 10!
+
+// Drain all permits
+int drained = sem.drainPermits();  // Returns count of drained permits
+
+
+SEMAPHORE VS LOCK
+-----------------
+| Feature              | Lock             | Semaphore          |
+|----------------------|------------------|--------------------|
+| Permits              | 1 (binary)       | N (configurable)   |
+| Reentrant            | Yes (Reentrant*) | NO                 |
+| Owner tracking       | Yes              | NO                 |
+| Who can release      | Owner only       | Any thread         |
+| Use case             | Mutual exclusion | Resource limiting  |
+
+
+SEMAPHORE VS CountDownLatch
+---------------------------
+| Feature              | Semaphore        | CountDownLatch     |
+|----------------------|------------------|--------------------|
+| Permits go up/down   | Both (reusable)  | Only down (once)   |
+| Reset                | Yes              | NO                 |
+| Use case             | Resource control | One-time gate      |
+
+
+COMMON PITFALLS
+---------------
+1. Not releasing in finally block
+   sem.acquire();
+   doWork();        // If exception here...
+   sem.release();   // ...this never runs! PERMIT LEAK!
+
+   // CORRECT:
+   sem.acquire();
+   try {
+       doWork();
+   } finally {
+       sem.release();
+   }
+
+2. Releasing more than acquired (permit inflation)
+   sem.acquire(1);
+   sem.release(5);  // Now 4 extra permits exist!
+
+3. Assuming reentrancy
+   sem.acquire();
+   sem.acquire();   // BLOCKS! Same thread can't acquire twice
+
+4. Using for mutual exclusion when Lock is simpler
+   // If you just need mutex, use ReentrantLock instead
+
+
+THREAD SAFETY NOTE
+------------------
+Semaphore itself is thread-safe, but the resource it guards may not be.
+The semaphore only limits concurrent access; it doesn't provide
+synchronization for the actual resource operations.
+
+// Semaphore limits access to 3 threads
+Semaphore sem = new Semaphore(3);
+
+// But the shared list still needs synchronization!
+List<String> sharedList = Collections.synchronizedList(new ArrayList<>());
+
+
+PRACTICAL EXAMPLE: Print Queue
+------------------------------
+class PrintQueue {
+    private final Semaphore semaphore = new Semaphore(3);  // 3 printers
+
+    void printJob(Document doc) throws InterruptedException {
+        semaphore.acquire();
+        try {
+            System.out.println(Thread.currentThread().getName() +
+                " printing on printer. Available: " + semaphore.availablePermits());
+            Thread.sleep(1000);  // Simulate printing
+        } finally {
+            semaphore.release();
+        }
+    }
+}
