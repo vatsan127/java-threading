@@ -1,0 +1,472 @@
+INTERRUPTED EXCEPTION IN JAVA THREADING
+========================================
+
+================================================================================
+1. What is InterruptedException?
+================================================================================
+
+CONCEPT:
+--------
+InterruptedException is a CHECKED exception thrown when a thread that is
+waiting, sleeping, or otherwise blocked is interrupted by another thread.
+It's Java's cooperative mechanism for thread cancellation.
+
+KEY POINTS:
+-----------
+- It's a SIGNAL, not an error
+- It means "someone wants this thread to stop"
+- The interrupted thread decides how to respond
+- It's part of Java's cooperative interruption model
+
+================================================================================
+2. Methods That Throw InterruptedException
+================================================================================
+
+Thread class:
+- Thread.sleep(long millis)
+- Thread.join()
+- Thread.join(long millis)
+
+Object class:
+- Object.wait()
+- Object.wait(long timeout)
+
+java.util.concurrent:
+- BlockingQueue.take()
+- BlockingQueue.put()
+- BlockingQueue.poll(timeout, unit)
+- Semaphore.acquire()
+- Lock.lockInterruptibly()
+- Condition.await()
+- Future.get()
+- Future.get(timeout, unit)
+- CountDownLatch.await()
+- CyclicBarrier.await()
+
+
+================================================================================
+3. The Interrupt Mechanism
+================================================================================
+
+HOW INTERRUPTION WORKS:
+-----------------------
+Thread A                           Thread B
+   |                                  |
+   |--- threadB.interrupt() --------->|
+   |                                  |
+   |                         [If B is in blocking call]
+   |                         InterruptedException thrown
+   |                                  |
+   |                         [If B is running normally]
+   |                         Interrupt flag set to true
+
+
+THE INTERRUPT FLAG:
+-------------------
+Every thread has an interrupt status flag (boolean):
+
+// Check if current thread is interrupted (does NOT clear flag)
+Thread.currentThread().isInterrupted()    // Returns: true/false
+
+// Check if current thread is interrupted (CLEARS the flag!)
+Thread.interrupted()                       // Returns: true/false, clears flag
+
+// Set the interrupt flag on a thread
+thread.interrupt()                         // Sets flag, or throws if blocking
+
+
+IMPORTANT DISTINCTION:
+----------------------
+| Method                              | Clears Flag? | Instance/Static |
+|-------------------------------------|--------------|-----------------|
+| thread.isInterrupted()              | NO           | Instance        |
+| Thread.interrupted()                | YES          | Static          |
+| thread.interrupt()                  | N/A (sets)   | Instance        |
+
+
+================================================================================
+4. What Happens When InterruptedException is Thrown
+================================================================================
+
+SEQUENCE OF EVENTS:
+-------------------
+1. Thread calls blocking method (sleep, wait, join, etc.)
+2. Another thread calls interrupt() on the blocked thread
+3. The blocking method:
+   a. CLEARS the interrupt flag (sets it to false)
+   b. Throws InterruptedException
+4. The exception propagates up the call stack
+
+CRITICAL POINT:
+---------------
+When InterruptedException is thrown, the interrupt flag is CLEARED!
+This is why you must restore it if you catch the exception.
+
+EXAMPLE:
+--------
+// Before interrupt: flag = false
+Thread.sleep(1000);    // Another thread calls interrupt()
+// InterruptedException thrown
+// After catch: flag = false (was cleared!)
+
+// To preserve interrupt status:
+catch (InterruptedException e) {
+    Thread.currentThread().interrupt();  // Restore flag to true
+}
+
+
+================================================================================
+5. Handling InterruptedException - Best Practices
+================================================================================
+
+PATTERN 1: PROPAGATE (Preferred for library code)
+-------------------------------------------------
+// Let caller handle the interruption
+public void doWork() throws InterruptedException {
+    Thread.sleep(1000);
+    // Exception propagates to caller
+}
+
+WHEN TO USE:
+- Library/utility methods
+- When you don't know how caller wants to handle interruption
+- When calling code should decide the response
+
+
+PATTERN 2: RESTORE AND HANDLE (When you must catch)
+---------------------------------------------------
+public void doWork() {
+    try {
+        Thread.sleep(1000);
+    } catch (InterruptedException e) {
+        // CRITICAL: Restore interrupt status!
+        Thread.currentThread().interrupt();
+        // Handle: cleanup, exit loop, return, etc.
+    }
+}
+
+WHEN TO USE:
+- In Runnable.run() (cannot throw checked exceptions)
+- When you need to do cleanup before exiting
+- When you want to exit gracefully
+
+
+PATTERN 3: RESTORE AND THROW RUNTIME EXCEPTION
+----------------------------------------------
+public void doWork() {
+    try {
+        Thread.sleep(1000);
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();  // Restore first!
+        throw new RuntimeException("Interrupted", e);
+    }
+}
+
+WHEN TO USE:
+- When you can't propagate checked exception
+- When interruption is truly exceptional in your context
+
+
+================================================================================
+6. Anti-Patterns to AVOID
+================================================================================
+
+ANTI-PATTERN 1: SWALLOWING THE EXCEPTION (NEVER DO THIS!)
+---------------------------------------------------------
+// BAD - Interrupt is lost forever!
+try {
+    Thread.sleep(1000);
+} catch (InterruptedException e) {
+    // Empty catch - DON'T DO THIS!
+}
+
+// BAD - Just logging doesn't preserve interrupt
+try {
+    Thread.sleep(1000);
+} catch (InterruptedException e) {
+    e.printStackTrace();  // Continues running, interrupt lost!
+}
+
+
+ANTI-PATTERN 2: IGNORING IN A LOOP
+----------------------------------
+// BAD - Thread cannot be stopped!
+while (true) {
+    try {
+        queue.take();
+    } catch (InterruptedException e) {
+        e.printStackTrace();  // Ignores and continues
+    }
+}
+
+// GOOD - Exits on interrupt
+while (!Thread.currentThread().isInterrupted()) {
+    try {
+        queue.take();
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        break;
+    }
+}
+
+
+ANTI-PATTERN 3: WRAPPING WITHOUT RESTORING FLAG
+-----------------------------------------------
+// BAD - Interrupt flag not restored
+try {
+    Thread.sleep(1000);
+} catch (InterruptedException e) {
+    throw new RuntimeException(e);  // Flag still false!
+}
+
+// GOOD - Restore then throw
+try {
+    Thread.sleep(1000);
+} catch (InterruptedException e) {
+    Thread.currentThread().interrupt();  // Restore first
+    throw new RuntimeException(e);
+}
+
+
+================================================================================
+7. Checking Interrupt Status in Long-Running Tasks
+================================================================================
+
+For tasks with no blocking calls, periodically check the interrupt flag:
+
+PATTERN:
+--------
+public void run() {
+    while (!Thread.currentThread().isInterrupted()) {
+        // Do work
+        processNextItem();
+
+        // Optional: check more frequently for responsiveness
+        if (Thread.currentThread().isInterrupted()) {
+            break;
+        }
+    }
+
+    // Cleanup
+    cleanup();
+}
+
+
+COMBINED PATTERN (Blocking + Non-blocking):
+-------------------------------------------
+public void run() {
+    while (!Thread.currentThread().isInterrupted()) {
+        try {
+            // Non-blocking work
+            processData();
+
+            // Blocking call
+            Thread.sleep(100);
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            break;
+        }
+    }
+    cleanup();
+}
+
+
+================================================================================
+8. Thread.interrupted() vs isInterrupted()
+================================================================================
+
+Thread.interrupted() - STATIC METHOD:
+-------------------------------------
+- Returns current thread's interrupt status
+- CLEARS the interrupt flag
+- Use when you want to check AND consume the interrupt
+
+boolean wasInterrupted = Thread.interrupted();  // true, flag now false
+boolean stillInterrupted = Thread.interrupted();  // false (was cleared)
+
+
+isInterrupted() - INSTANCE METHOD:
+----------------------------------
+- Returns the thread's interrupt status
+- Does NOT clear the flag
+- Use for checking without consuming
+
+boolean isInt = thread.isInterrupted();  // true
+boolean stillInt = thread.isInterrupted();  // still true
+
+
+WHY interrupted() CLEARS THE FLAG:
+----------------------------------
+- Allows single consumption of interrupt signal
+- Prevents multiple handlers from responding to same interrupt
+- Thread can "acknowledge" the interrupt and reset
+
+
+================================================================================
+9. InterruptedException with Different Blocking Methods
+================================================================================
+
+Thread.sleep():
+---------------
+- Throws immediately when interrupted
+- No lock involved
+- Interrupt flag is cleared
+
+Object.wait():
+--------------
+- Must be in synchronized block
+- When interrupted, RE-ACQUIRES the lock before throwing
+- Interrupt flag is cleared
+
+Thread.join():
+--------------
+- Throws immediately when interrupted
+- Calling thread (not target) receives exception
+- Interrupt flag is cleared
+
+BlockingQueue.take()/put():
+---------------------------
+- Throws when interrupted while waiting
+- Queue state remains consistent
+- Interrupt flag is cleared
+
+
+================================================================================
+10. Common Scenarios and Solutions
+================================================================================
+
+SCENARIO 1: Cancellable Task
+----------------------------
+class CancellableTask implements Runnable {
+    public void run() {
+        while (!Thread.currentThread().isInterrupted()) {
+            try {
+                doWork();
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        cleanup();
+    }
+}
+
+
+SCENARIO 2: Task with Timeout
+-----------------------------
+public Result computeWithTimeout(long timeout) {
+    Future<Result> future = executor.submit(this::compute);
+    try {
+        return future.get(timeout, TimeUnit.MILLISECONDS);
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        future.cancel(true);  // Interrupt the task
+        return null;
+    } catch (TimeoutException e) {
+        future.cancel(true);
+        return null;
+    }
+}
+
+
+SCENARIO 3: Resource Cleanup on Interrupt
+-----------------------------------------
+public void processWithResources() {
+    Resource resource = acquireResource();
+    try {
+        while (!Thread.currentThread().isInterrupted()) {
+            resource.process();
+        }
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+    } finally {
+        resource.release();  // Always cleanup
+    }
+}
+
+
+================================================================================
+11. Relationship with ExecutorService
+================================================================================
+
+shutdownNow():
+--------------
+- Calls interrupt() on all running threads
+- Returns list of tasks that never started
+- Running tasks receive InterruptedException (if blocking)
+
+Future.cancel(true):
+--------------------
+- The 'true' parameter means "may interrupt if running"
+- Calls interrupt() on the thread running the task
+- Task must handle InterruptedException properly
+
+EXAMPLE:
+--------
+ExecutorService executor = Executors.newFixedThreadPool(4);
+Future<?> future = executor.submit(() -> {
+    while (!Thread.currentThread().isInterrupted()) {
+        // Work
+    }
+});
+
+// Later...
+future.cancel(true);  // Interrupts the thread
+executor.shutdownNow();  // Interrupts all threads
+
+
+================================================================================
+12. Key Takeaways
+================================================================================
+
+1. InterruptedException is a SIGNAL, not an error
+   - It means "please stop what you're doing"
+
+2. NEVER swallow InterruptedException
+   - Always propagate OR restore the interrupt flag
+
+3. The flag is CLEARED when exception is thrown
+   - You must restore it with Thread.currentThread().interrupt()
+
+4. Use isInterrupted() for checking in loops
+   - It doesn't clear the flag
+
+5. Use Thread.interrupted() only when you want to consume
+   - It clears the flag
+
+6. Interruption is COOPERATIVE
+   - The interrupted thread decides how to respond
+
+7. Clean up resources before exiting
+   - Use finally blocks or try-with-resources
+
+8. Keep blocking calls short
+   - Or check interrupt status between calls
+
+9. Design for cancellation
+   - Make your threads responsive to interrupts
+
+10. Test interrupt handling
+    - It's often overlooked and buggy
+
+
+================================================================================
+13. Files in This Package
+================================================================================
+
+InterruptedExceptionMain.java
+- Main demo: basic interrupt, flag behavior, proper handling
+
+CancellableTask.java
+- Real-world cancellable task pattern
+
+InterruptHandlingPatterns.java
+- Three patterns: propagate, restore, anti-pattern demo
+
+InterruptWithJoin.java
+- Demonstrates interrupt with Thread.join()
+
+InterruptWithWait.java
+- Demonstrates interrupt with Object.wait()
