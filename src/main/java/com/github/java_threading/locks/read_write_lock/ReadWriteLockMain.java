@@ -1,8 +1,5 @@
 package com.github.java_threading.locks.read_write_lock;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
@@ -16,9 +13,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public class ReadWriteLockMain {
 
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-    private final Map<String, String> cache = new HashMap<>();
-
     public static void main(String[] args) throws InterruptedException {
         ReadWriteLockMain example = new ReadWriteLockMain();
 
@@ -26,21 +20,13 @@ public class ReadWriteLockMain {
         System.out.println("=== Example 1: Basic Read-Write Separation ===");
         example.basicReadWriteExample();
 
-        // Example 2: Thread-safe cache implementation
-        System.out.println("\n=== Example 2: Thread-Safe Cache ===");
-        example.cacheExample();
-
-        // Example 3: Multiple concurrent readers
-        System.out.println("\n=== Example 3: Multiple Concurrent Readers ===");
+        // Example 2: Multiple concurrent readers
+        System.out.println("\n=== Example 2: Multiple Concurrent Readers ===");
         example.multipleConcurrentReadersExample();
 
-        // Example 4: Lock downgrading (write -> read)
-        System.out.println("\n=== Example 4: Lock Downgrading ===");
+        // Example 3: Lock downgrading (write -> read)
+        System.out.println("\n=== Example 3: Lock Downgrading ===");
         example.lockDowngradingExample();
-
-        // Example 5: Fair vs Unfair lock
-        System.out.println("\n=== Example 5: Fair Lock ===");
-        example.fairLockExample();
     }
 
     /**
@@ -88,71 +74,7 @@ public class ReadWriteLockMain {
     }
 
     /**
-     * Example 2: Thread-safe cache using ReadWriteLock
-     * Classic use case: many reads, few writes
-     */
-    public void cacheExample() throws InterruptedException {
-        cache.clear();
-
-        // Writer thread - populates the cache
-        Thread writer = new Thread(() -> {
-            for (int i = 1; i <= 3; i++) {
-                put("key" + i, "value" + i);
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-        }, "cache-writer");
-
-        // Multiple reader threads - read from cache
-        Thread reader1 = new Thread(() -> readCache("reader-1"), "reader-1");
-        Thread reader2 = new Thread(() -> readCache("reader-2"), "reader-2");
-
-        writer.start();
-        Thread.sleep(25); // Let some writes happen
-        reader1.start();
-        reader2.start();
-
-        writer.join();
-        reader1.join();
-        reader2.join();
-    }
-
-    private void put(String key, String value) {
-        rwLock.writeLock().lock();
-        try {
-            System.out.println(Thread.currentThread().getName() + ": Writing " + key + "=" + value);
-            cache.put(key, value);
-        } finally {
-            rwLock.writeLock().unlock();
-        }
-    }
-
-    private String get(String key) {
-        rwLock.readLock().lock();
-        try {
-            return cache.get(key);
-        } finally {
-            rwLock.readLock().unlock();
-        }
-    }
-
-    private void readCache(String readerName) {
-        for (int i = 1; i <= 5; i++) {
-            String value = get("key1");
-            System.out.println(readerName + ": Read key1 = " + value);
-            try {
-                Thread.sleep(30);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
-    /**
-     * Example 3: Multiple concurrent readers
+     * Example 2: Multiple concurrent readers
      * Demonstrates that multiple readers can hold the lock simultaneously
      */
     public void multipleConcurrentReadersExample() throws InterruptedException {
@@ -193,7 +115,7 @@ public class ReadWriteLockMain {
     }
 
     /**
-     * Example 4: Lock downgrading (write lock -> read lock)
+     * Example 3: Lock downgrading (write lock -> read lock)
      * You CAN downgrade: acquire write lock, then read lock, then release write lock
      * You CANNOT upgrade: acquiring read lock first, then trying to get write lock causes deadlock
      */
@@ -225,25 +147,4 @@ public class ReadWriteLockMain {
         }
     }
 
-    /**
-     * Example 5: Fair lock demonstration
-     * Fair mode ensures FIFO ordering of lock acquisition
-     */
-    public void fairLockExample() {
-        ReentrantReadWriteLock unfairLock = new ReentrantReadWriteLock(false); // default
-        ReentrantReadWriteLock fairLock = new ReentrantReadWriteLock(true);
-
-        System.out.println("Unfair lock isFair(): " + unfairLock.isFair());
-        System.out.println("Fair lock isFair(): " + fairLock.isFair());
-
-        System.out.println("\nFair mode:");
-        System.out.println("- Threads acquire locks in FIFO order");
-        System.out.println("- Prevents thread starvation");
-        System.out.println("- Lower throughput due to context switching");
-
-        System.out.println("\nUnfair mode (default):");
-        System.out.println("- Better throughput");
-        System.out.println("- May cause thread starvation");
-        System.out.println("- Allows barging (thread can acquire lock before waiting threads)");
-    }
 }

@@ -83,26 +83,6 @@ condition.signal()                       // Wake ONE waiting thread
 condition.signalAll()                    // Wake ALL waiting threads
 
 
-WHY USE WHILE LOOP WITH await()?
---------------------------------
-ALWAYS check condition in a while loop, not if:
-
-// WRONG!
-if (!conditionMet) {
-    condition.await();
-}
-
-// CORRECT!
-while (!conditionMet) {
-    condition.await();
-}
-
-Reasons:
-1. Spurious wakeups - await() can return without signal
-2. Multiple waiters - another thread might consume the condition first
-3. State might change between signal and wakeup
-
-
 MULTIPLE CONDITIONS - THE KILLER FEATURE
 ----------------------------------------
 With synchronized/wait/notify, you have ONE wait set per object.
@@ -256,36 +236,6 @@ class Gate {
         }
     }
 }
-
-2. State Machine Pattern:
--------------------------
-class StateMachine {
-    private final Lock lock = new ReentrantLock();
-    private final Condition stateChanged = lock.newCondition();
-    private State state = State.INITIAL;
-
-    void waitForState(State target) throws InterruptedException {
-        lock.lock();
-        try {
-            while (state != target) {
-                stateChanged.await();
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    void setState(State newState) {
-        lock.lock();
-        try {
-            state = newState;
-            stateChanged.signalAll();
-        } finally {
-            lock.unlock();
-        }
-    }
-}
-
 
 COMMON PITFALLS
 ---------------

@@ -87,45 +87,10 @@ IMPORTANT: Unlike ReentrantLock, binary semaphore is NOT reentrant!
 Same thread acquiring twice will BLOCK (not deadlock, just wait forever).
 
 
+USAGE
+--------
 CONNECTION POOL PATTERN
------------------------
-class ConnectionPool {
-    private final Semaphore available;
-    private final Connection[] connections;
-    private final boolean[] used;
-
-    ConnectionPool(int size) {
-        available = new Semaphore(size, true);  // Fair
-        connections = new Connection[size];
-        // Initialize connections...
-    }
-
-    Connection getConnection() throws InterruptedException {
-        available.acquire();        // Wait for permit
-        return getNextAvailable();  // Get actual connection
-    }
-
-    void releaseConnection(Connection c) {
-        markAsUnused(c);           // Return to pool
-        available.release();        // Return permit
-    }
-}
-
-
 RATE LIMITING PATTERN
----------------------
-// Allow max 10 requests per second
-Semaphore rateLimiter = new Semaphore(10);
-
-void processRequest(Request req) throws InterruptedException {
-    rateLimiter.acquire();
-    try {
-        // Process request
-    } finally {
-        // Schedule permit release after 1 second
-        scheduler.schedule(() -> rateLimiter.release(), 1, TimeUnit.SECONDS);
-    }
-}
 
 
 FAIR VS UNFAIR MODE
@@ -139,20 +104,6 @@ Fair: new Semaphore(n, true)
 - Threads acquire permits in FIFO order
 - Prevents starvation
 - Lower throughput
-
-
-MULTIPLE PERMITS
-----------------
-Semaphore sem = new Semaphore(10);
-
-sem.acquire(3);    // Acquire 3 permits at once
-sem.release(3);    // Release 3 permits
-
-// WARNING: Can release more than acquired!
-sem.release(5);    // Increases total permits beyond 10!
-
-// Drain all permits
-int drained = sem.drainPermits();  // Returns count of drained permits
 
 
 SEMAPHORE VS LOCK
@@ -175,59 +126,121 @@ SEMAPHORE VS CountDownLatch
 | Use case             | Resource control | One-time gate      |
 
 
-COMMON PITFALLS
----------------
-1. Not releasing in finally block
-   sem.acquire();
-   doWork();        // If exception here...
-   sem.release();   // ...this never runs! PERMIT LEAK!
-
-   // CORRECT:
-   sem.acquire();
-   try {
-       doWork();
-   } finally {
-       sem.release();
-   }
-
-2. Releasing more than acquired (permit inflation)
-   sem.acquire(1);
-   sem.release(5);  // Now 4 extra permits exist!
-
-3. Assuming reentrancy
-   sem.acquire();
-   sem.acquire();   // BLOCKS! Same thread can't acquire twice
-
-4. Using for mutual exclusion when Lock is simpler
-   // If you just need mutex, use ReentrantLock instead
-
-
 THREAD SAFETY NOTE
 ------------------
 Semaphore itself is thread-safe, but the resource it guards may not be.
 The semaphore only limits concurrent access; it doesn't provide
 synchronization for the actual resource operations.
 
-// Semaphore limits access to 3 threads
-Semaphore sem = new Semaphore(3);
 
-// But the shared list still needs synchronization!
-List<String> sharedList = Collections.synchronizedList(new ArrayList<>());
+INTERRUPTED EXCEPTION
+---------------------
+When a thread is waiting on acquire(), it can be interrupted by another thread.
+This throws InterruptedException and the thread does NOT get the permit.
+
+WHY DOES IT HAPPEN?
+- Another thread called interrupt() on the waiting thread
+- Thread pool shutdown (shutdownNow() interrupts waiting tasks)
+- Timeout mechanisms that use interruption
+- Cancellation of tasks
+
+THREE WAYS TO HANDLE:
+
+1. PROPAGATE (Recommended for most cases)
+   - Let the caller decide what to do
+   - Preserves the interrupt signal
+
+   public void doWork() throws InterruptedException {
+       semaphore.acquire();  // Let exception propagate
+       try {
+           // work
+       } finally {
+           semaphore.release();
+       }
+   }
+
+2. RESTORE INTERRUPT FLAG (When you can't throw)
+   - Catch it, clean up, restore the flag
+   - Allows code higher up to detect interruption
+
+   @Override
+   public void run() {  // Runnable can't throw checked exceptions
+       try {
+           semaphore.acquire();
+           try {
+               // work
+           } finally {
+               semaphore.release();
+           }
+       } catch (InterruptedException e) {
+           Thread.currentThread().interrupt();  // Restore flag!
+           // Optional: log or handle gracefully
+       }
+   }
+
+3. USE acquireUninterruptibly() (Rare cases)
+   - Ignores interrupts, keeps waiting
+   - Use only when you MUST complete the operation
+
+   semaphore.acquireUninterruptibly();  // Won't throw
+   try {
+       // critical work that must happen
+   } finally {
+       semaphore.release();
+   }
+
+COMMON MISTAKE - SWALLOWING THE INTERRUPT:
+
+   // BAD - Don't do this!
+   try {
+       semaphore.acquire();
+   } catch (InterruptedException e) {
+       // Empty catch or just logging - interrupt is lost!
+   }
+
+This breaks the cooperative cancellation model. Always either:
+- Propagate the exception, OR
+- Restore the interrupt flag with Thread.currentThread().interrupt()
 
 
-PRACTICAL EXAMPLE: Print Queue
-------------------------------
-class PrintQueue {
-    private final Semaphore semaphore = new Semaphore(3);  // 3 printers
+RELEASE IN FINALLY BLOCK
+------------------------
+IMPORTANT: Only release if you successfully acquired!
 
-    void printJob(Document doc) throws InterruptedException {
-        semaphore.acquire();
-        try {
-            System.out.println(Thread.currentThread().getName() +
-                " printing on printer. Available: " + semaphore.availablePermits());
-            Thread.sleep(1000);  // Simulate printing
-        } finally {
-            semaphore.release();
-        }
-    }
-}
+   // WRONG - may release without acquiring
+   try {
+       semaphore.acquire();
+       // work
+   } catch (InterruptedException e) {
+       Thread.currentThread().interrupt();
+   } finally {
+       semaphore.release();  // BUG: releases even if acquire failed!
+   }
+
+   // CORRECT - track acquisition
+   boolean acquired = false;
+   try {
+       semaphore.acquire();
+       acquired = true;
+       // work
+   } catch (InterruptedException e) {
+       Thread.currentThread().interrupt();
+   } finally {
+       if (acquired) {
+           semaphore.release();
+       }
+   }
+
+   // OR - structure code properly
+   try {
+       semaphore.acquire();
+   } catch (InterruptedException e) {
+       Thread.currentThread().interrupt();
+       return;  // Exit early, never reached the work
+   }
+   try {
+       // work
+   } finally {
+       semaphore.release();  // Safe: only reached if acquired
+   }
+

@@ -123,33 +123,6 @@ Fair: new ReentrantReadWriteLock(true)
 - Prevents starvation
 - Lower throughput due to more context switches
 
-
-THREAD-SAFE CACHE EXAMPLE
--------------------------
-class Cache<K, V> {
-    private final Map<K, V> map = new HashMap<>();
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-
-    public V get(K key) {
-        lock.readLock().lock();
-        try {
-            return map.get(key);
-        } finally {
-            lock.readLock().unlock();
-        }
-    }
-
-    public void put(K key, V value) {
-        lock.writeLock().lock();
-        try {
-            map.put(key, value);
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
-}
-
-
 COMPARISON WITH OTHER LOCKS
 ---------------------------
 | Feature           | synchronized | ReentrantLock | ReadWriteLock |
